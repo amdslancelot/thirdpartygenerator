@@ -10,7 +10,7 @@ args = parser.parse_args()
 
 is_debug = False
 prefix = args.prefix
-filter_prefix = [args.filter]
+filter_prefix = args.filter
 
 
 
@@ -48,13 +48,43 @@ def swap_based_on_prefix(l, prefix):
 
 def swap_based_on_pkgname_and_following_digits(l, pkgname):
     for n in range( 1, len(l) ):
-        debug("current: " + l[n])
+        debug("current: [" + str(n) + "], " + l[n])
         debug("char (is digit?): " + l[n][len(pkgname)+1])
         if l[n].startswith(pkgname) and l[n][len(pkgname)+1].isdigit():
             debug("[RUNTIME][EXACT_NAME_MATCH] FOUND element to swap! index: " + str(n))
             l[0], l[n] = l[n], l[0]
             break
     return l
+
+# Get full pkg name by "rpm -qa"
+def get_full_pkgname_rpm_qa(partial_name, match):
+    cmd = "rpm -qa | grep " + partial_name
+    debug("[CMD] " + cmd)
+    r = subprocess.getoutput(cmd)
+
+    # rpm -qa result (multiple packages) into one list
+    l_pkgs = r.split(sep="\n")
+    debug(l_pkgs)
+
+    if l_pkgs[0] == "" or len(l_pkgs) == 0:
+        return None
+
+    # Move matching pkgname to the first index
+    debug("length: " + str(len(l_pkgs)))
+    #l_pkgs = swap_based_on_prefix(l_pkgs, filter_prefix)
+    l_pkgs = swap_based_on_pkgname_and_following_digits(l_pkgs, match)
+    debug(l_pkgs)
+
+    return l_pkgs[0]
+
+# Get list of runtime dependencies
+def get_runtime_deps(pkgname):
+    cmd_repoquery = "repoquery --requires " + pkgname
+    debug("[CMD] " + cmd_repoquery)
+    r = subprocess.getoutput(cmd_repoquery)
+    return remove_expiration_msg(r)
+
+
 
 # Construct THIRD_PARTY_LICENSE file
 # header
@@ -65,78 +95,58 @@ debug("search string: " + args.package)
 input_pkg = args.package[len(prefix):] if prefix and args.package.startswith(prefix) else args.package
 
 # Get full rpm name
-cmd_rpm = "rpm -qa | grep " + input_pkg
-debug("[CMD] " + cmd_rpm)
-r1 = subprocess.getoutput(cmd_rpm)
-#debug(r1)
-
-# rpm -qa result (multiple packages) into one list
-l_pkgs = r1.split(sep="\n")
-debug(l_pkgs)
-
-if l_pkgs[0] == "":
+full_pkgname = get_full_pkgname_rpm_qa(partial_name=input_pkg, match=filter_prefix+input_pkg)
+if not full_pkgname:
     warn("no packages found: " + args.package)
     exit(0)
 
-# Get Package Name
-debug("length: " + str(len(l_pkgs)))
-#l_pkgs = swap_based_on_prefix(l_pkgs, filter_prefix[0])
-l_pkgs = swap_based_on_pkgname_and_following_digits(l_pkgs, filter_prefix[0] + input_pkg)
-debug(l_pkgs)
-
-cmd_pkgname = "./pkgname_analyzer/pkgname_analyzer " + l_pkgs[0] + " name"
+# Get pkgname without version
+cmd_pkgname = "./pkgname_analyzer/pkgname_analyzer " + full_pkgname + " name"
 pkgname = subprocess.getoutput(cmd_pkgname)
 
+# Get runtime deps
+l_deps = get_runtime_deps(pkgname)
+info(", ".join(l_deps))
+
 # Convert Runtime Dependencies into 3rd party licenses
-cmd_repoquery = "repoquery --requires " + pkgname
-debug("[CMD] " + cmd_repoquery)
-r3 = subprocess.getoutput(cmd_repoquery)
-l_r3 = remove_expiration_msg(r3)
-info(", ".join(l_r3))
+l_deps_no_dup = set()
+for n in range(0, len(l_deps)):
+    debug("current: " + l_deps[n])
 
-for n in range(0, len(l_r3)):
-    debug("n: " + str(n))
-    # Case: python(abi) = 3.9
-    if l_r3[n].startswith("python("):
-        info("[SKIPPING] " + l_r3[n])
-        continue
-    # Case: ld-linux-aarch64.so.1()(64bit), 
-    #       ld-linux-aarch64.so.1(GLIBC_2.17)(64bit), 
-    #       libc.so.6(GLIBC_2.17)(64bit), 
-    #       libc.so.6(GLIBC_2.4)(64bit), 
-    #       libpthread.so.0()(64bit), 
-    #       python(abi) = 3.9, 
-    #       rtld(GNU_HASH)
-    #doesn't follow format. ex: python39-django >= 2.2
-    #if l_r3[n].find(" ") < 0:
-    if l_r3[n].find(filter_prefix[0][:len(filter_prefix[0])-1]) < 0:
-        info("[SKIPPING] " + l_r3[n])
+    # Skip Case 1: Native Python
+    #              ex: python(abi) = 3.9
+    if l_deps[n].startswith("python("):
+        info("[SKIPPING] " + l_deps[n])
         continue
 
-    # Get package name
-    pkgname_rpm_qa = l_r3[n][:l_r3[n].find(" ")]
-    cmd_rpm_qa = "rpm -qa | grep " + pkgname_rpm_qa
-    debug("[CMD] " + cmd_rpm_qa)
-    r4 = subprocess.getoutput(cmd_rpm_qa)
-
-    # rpm -qa result (multiple packages) into one list
-    l_r4 = r4.split(sep="\n")
-    debug(l_r4)
-
-    # Edge Case: empty result
-    if l_r4[0] == "":
-        warn("no packages found: " + line)
+    # Skip Case 2: Doesn' have matching filter_prefix
+    #          ex: ld-linux-aarch64.so.1()(64bit), 
+    #              ld-linux-aarch64.so.1(GLIBC_2.17)(64bit), 
+    #              libc.so.6(GLIBC_2.17)(64bit), 
+    #              libc.so.6(GLIBC_2.4)(64bit), 
+    #              libpthread.so.0()(64bit), 
+    #              rtld(GNU_HASH)
+    #       match: python39-django >= 2.2
+    #if l_deps[n].find(" ") < 0:
+    if l_deps[n].find( filter_prefix[ :len(filter_prefix) - 1 ] ) < 0:
+        info("[SKIPPING] " + l_deps[n])
         continue
 
-    # Put the element with the filter_prefix string to the 1st element
-    debug("length: " + str(len(l_r4)))
-    l_r4 = swap_based_on_pkgname_and_following_digits(l_r4, pkgname_rpm_qa)
-    debug(l_r4)
+    # Get dependency full package name
+    dep_short_pkgname = l_deps[n][:l_deps[n].find(" ")]
+    l_deps_no_dup.add(dep_short_pkgname)
+
+debug("[Final dependency list to process] " + ", ".join(l_deps_no_dup))
+for n,val in enumerate(l_deps_no_dup):
+    dep_full_pkgname = get_full_pkgname_rpm_qa(partial_name=val, match=val)
+    if not dep_full_pkgname:
+        warn("no packages found for dependency name: " + dep_short_pkgname)
+        exit(0)
 
     # 
-    cmd_pkgname = "./pkgname_analyzer/pkgname_analyzer " + l_r4[0] + " name"
+    cmd_pkgname = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " name"
     thirdparty_title = subprocess.getoutput(cmd_pkgname)
-    cmd_pkgversion = "./pkgname_analyzer/pkgname_analyzer " + l_r4[0] + " version"
+    cmd_pkgversion = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " version"
     thirdparty_version = subprocess.getoutput(cmd_pkgversion)
 
     # Get 3rd party license
@@ -149,7 +159,7 @@ for n in range(0, len(l_r3)):
             break
 
     # 3rd party title
-    thirdparty_full_title = prefix[:len(prefix)-1] + " " + thirdparty_title.replace(filter_prefix[0], "") + " " + thirdparty_version.split(sep="-")[0] + " (" + thirdparty_license + ")"
+    thirdparty_full_title = prefix[:len(prefix)-1] + " " + thirdparty_title.replace(filter_prefix, "") + " " + thirdparty_version.split(sep="-")[0] + " (" + thirdparty_license + ")"
     thirdparty_full_tltle_bar = "-"*len(thirdparty_full_title)
     thirdparty_output += "\n"
     thirdparty_output += thirdparty_full_tltle_bar + "\n"
