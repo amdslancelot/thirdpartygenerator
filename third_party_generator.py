@@ -136,7 +136,7 @@ for n in range(0, len(l_deps)):
     dep_short_pkgname = l_deps[n][:l_deps[n].find(" ")]
     l_deps_no_dup.add(dep_short_pkgname)
 
-debug("[Final dependency list to process] " + ", ".join(l_deps_no_dup))
+info("[Final dependency list to process] " + ", ".join(l_deps_no_dup))
 for n,val in enumerate(l_deps_no_dup):
     dep_full_pkgname = get_full_pkgname_rpm_qa(partial_name=val, match=val)
     if not dep_full_pkgname:
