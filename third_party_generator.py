@@ -51,7 +51,7 @@ def swap_based_on_pkgname_and_following_digits(l, pkgname):
         debug("current: [" + str(n) + "], " + l[n])
         debug("char (is digit?): " + l[n][len(pkgname)+1])
         if l[n].startswith(pkgname) and l[n][len(pkgname)+1].isdigit():
-            debug("[RUNTIME][EXACT_NAME_MATCH] FOUND element to swap! index: " + str(n))
+            debug("[RUNTIME] [EXACT_NAME_MATCH] FOUND element to swap! index: " + str(n))
             l[0], l[n] = l[n], l[0]
             break
     return l
@@ -64,13 +64,13 @@ def get_full_pkgname_rpm_qa(partial_name, match):
 
     # rpm -qa result (multiple packages) into one list
     l_pkgs = r.split(sep="\n")
-    debug(l_pkgs)
+    debug("[CMD] [Return] " + " / ".join(l_pkgs))
 
     if l_pkgs[0] == "" or len(l_pkgs) == 0:
         return None
 
     # Move matching pkgname to the first index
-    debug("length: " + str(len(l_pkgs)))
+    debug("[CMD] [Return] length: " + str(len(l_pkgs)))
     #l_pkgs = swap_based_on_prefix(l_pkgs, filter_prefix)
     l_pkgs = swap_based_on_pkgname_and_following_digits(l_pkgs, match)
     debug(l_pkgs)
@@ -96,6 +96,7 @@ input_pkg = args.package[len(prefix):] if prefix and args.package.startswith(pre
 
 # Get full rpm name
 full_pkgname = get_full_pkgname_rpm_qa(partial_name=input_pkg, match=filter_prefix+input_pkg)
+info("[Found Package To Process] " + full_pkgname)
 if not full_pkgname:
     warn("no packages found: " + args.package)
     exit(0)
@@ -132,11 +133,16 @@ for n in range(0, len(l_deps)):
         info("[SKIPPING] " + l_deps[n])
         continue
 
-    # Get dependency full package name
-    dep_short_pkgname = l_deps[n][:l_deps[n].find(" ")]
+    # Get dependency short package name
+    if " " in l_deps[n]:
+        # Case: python39-future >= 0.14.0
+        dep_short_pkgname = l_deps[n][:l_deps[n].find(" ")]
+    else:
+        # Case: python39-setuptools
+        dep_short_pkgname = l_deps[n]
     l_deps_no_dup.add(dep_short_pkgname)
 
-info("[Final dependency list to process] " + ", ".join(l_deps_no_dup))
+info("[Final Dependency List To Process] " + ", ".join(l_deps_no_dup))
 for n,val in enumerate(l_deps_no_dup):
     dep_full_pkgname = get_full_pkgname_rpm_qa(partial_name=val, match=val)
     if not dep_full_pkgname:
@@ -149,16 +155,16 @@ for n,val in enumerate(l_deps_no_dup):
     cmd_pkgversion = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " version"
     thirdparty_version = subprocess.getoutput(cmd_pkgversion)
 
-    # Get 3rd party license
+    # Get 3rd party license string
     cmd_dnf_info = "dnf info " + thirdparty_title
     r5 = subprocess.getoutput(cmd_dnf_info)
     l_r5 = r5.split(sep="\n")
     for n in range(0, len(l_r5)):
         if l_r5[n].startswith("License"):
-            thirdparty_license = l_r5[n].replace(" ", "").split(sep=":")[1]
+            thirdparty_license = l_r5[n].split(sep=":")[1].strip()
             break
 
-    # 3rd party title
+    # Compose 3rd party title
     thirdparty_full_title = prefix[:len(prefix)-1] + " " + thirdparty_title.replace(filter_prefix, "") + " " + thirdparty_version.split(sep="-")[0] + " (" + thirdparty_license + ")"
     thirdparty_full_tltle_bar = "-"*len(thirdparty_full_title)
     thirdparty_output += "\n"
