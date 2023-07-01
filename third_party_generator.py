@@ -9,6 +9,7 @@ args = parser.parse_args()
 #print(args)
 
 is_debug = False
+input_pkg = args.package.lower()
 prefix = args.prefix
 filter_prefix = args.filter
 
@@ -27,7 +28,7 @@ def warn(s):
       print("[WARN] %s" % (s))
 
 def remove_expiration_msg(s):
-    #debug("s:" + str(s))
+    #debug("s: " + str(s))
     l_s = s.split(sep="\n")
     #debug("before remove msg: " + ",".join(l_r4))
     for n in range(0, len(l_s)):
@@ -82,7 +83,9 @@ def get_runtime_deps(pkgname):
     cmd_repoquery = "repoquery --requires " + pkgname
     debug("[CMD] " + cmd_repoquery)
     r = subprocess.getoutput(cmd_repoquery)
-    return remove_expiration_msg(r)
+    l_r = remove_expiration_msg(r)
+    info("[Dependencies] " + ", ".join(l_r))
+    return l_r
 
 
 
@@ -92,7 +95,7 @@ thirdparty_output = subprocess.getoutput("cat THIRD_PARTY_LICENSES_HEADER")
 
 # Start
 debug("search string: " + args.package)
-input_pkg = args.package[len(prefix):] if prefix and args.package.startswith(prefix) else args.package
+input_pkg = input_pkg[len(prefix):] if prefix and input_pkg.startswith(prefix) else input_pkg
 
 # Get full rpm name
 full_pkgname = get_full_pkgname_rpm_qa(partial_name=input_pkg, match=filter_prefix+input_pkg)
@@ -107,7 +110,6 @@ pkgname = subprocess.getoutput(cmd_pkgname)
 
 # Get runtime deps
 l_deps = get_runtime_deps(pkgname)
-info(", ".join(l_deps))
 
 # Convert Runtime Dependencies into 3rd party licenses
 l_deps_no_dup = set()
@@ -176,8 +178,13 @@ for n,val in enumerate(l_deps_no_dup):
     # Lookup licenses
     cmd_license_path = "repoquery --list " + thirdparty_title + " | grep LICENSE"
     r_license_path = subprocess.getoutput(cmd_license_path)
-    license_path = remove_expiration_msg(r_license_path)[0]
-    thirdparty_output += subprocess.getoutput("cat " + license_path)
+    l_license_path = remove_expiration_msg(r_license_path)
+    if not l_license_path:
+        print("[ERROR] " + thirdparty_title + " doesn't have a LICENSE file!")
+        thirdparty_output += "(package installed missing license file)"
+    else:
+        license_path = l_license_path[0]
+        thirdparty_output += subprocess.getoutput("cat " + license_path)
 
     #if re.search('BSD', thirdparty_license, re.IGNORECASE) and "3" in thirdparty_license:
     #    thirdparty_output += subprocess.getoutput("cat licenses/BSD-3-Clause.txt")
