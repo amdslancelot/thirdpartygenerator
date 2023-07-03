@@ -1,5 +1,12 @@
 # thirdpartygenerator
 
+## Requirements
+
+- [pkgname_analyzer](https://github.com/amdslancelot/pkgname_analyzer)
+```
+export PATH="$PATH:/root/git/pkgname_analyzer/"
+```
+
 ## Usage
 ```
 # /root/git/thirdpartygenerator/third_party_generator.py -h
@@ -20,7 +27,7 @@ optional arguments:
   -d, --debug           debug mode
 ```
 
-## Example
+## Example: Generate 3rd party license for `python39-click`
 ```
 # ./third_party_generator.py -p click -pf python- -fi python39- 
 ===============================================================================

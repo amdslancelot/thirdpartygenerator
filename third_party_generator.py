@@ -1,18 +1,14 @@
 #!/usr/bin/python3
 import subprocess
 import sys
-import args_parser
 import re
 
+import args_parser
 parser = args_parser.get_parser()
 args = parser.parse_args()
 #print(args)
 
 is_debug = False
-input_pkg = args.package.lower()
-prefix = args.prefix
-filter_prefix = args.filter
-
 
 
 def debug(s):
@@ -88,130 +84,136 @@ def get_runtime_deps(pkgname):
     return l_r
 
 
+def main():
+    input_pkg = args.package.lower()
+    prefix = args.prefix
+    filter_prefix = args.filter
 
-# Construct THIRD_PARTY_LICENSE file
-# header
-thirdparty_output = subprocess.getoutput("cat THIRD_PARTY_LICENSES_HEADER")
+    # Construct THIRD_PARTY_LICENSE file
+    # header
+    thirdparty_output = subprocess.getoutput("cat THIRD_PARTY_LICENSES_HEADER")
 
-# Start
-debug("search string: " + args.package)
-input_pkg = input_pkg[len(prefix):] if prefix and input_pkg.startswith(prefix) else input_pkg
+    # Start
+    debug("search string: " + args.package)
+    input_pkg = input_pkg[len(prefix):] if prefix and input_pkg.startswith(prefix) else input_pkg
 
-# Get full rpm name
-full_pkgname = get_full_pkgname_rpm_qa(partial_name=input_pkg, match=filter_prefix+input_pkg)
-info("[Found Package To Process] " + full_pkgname)
-if not full_pkgname:
-    warn("no packages found: " + args.package)
-    exit(0)
-
-# Get pkgname without version
-cmd_pkgname = "./pkgname_analyzer/pkgname_analyzer " + full_pkgname + " name"
-pkgname = subprocess.getoutput(cmd_pkgname)
-
-# Get runtime deps
-l_deps = get_runtime_deps(pkgname)
-
-# Convert Runtime Dependencies into 3rd party licenses
-l_deps_no_dup = set()
-for n in range(0, len(l_deps)):
-    debug("current: " + l_deps[n])
-
-    # Skip Case 1: Native Python
-    #              ex: python(abi) = 3.9
-    if l_deps[n].startswith("python("):
-        info("[SKIPPING] " + l_deps[n])
-        continue
-
-    # Skip Case 2: Doesn' have matching filter_prefix
-    #          ex: ld-linux-aarch64.so.1()(64bit), 
-    #              ld-linux-aarch64.so.1(GLIBC_2.17)(64bit), 
-    #              libc.so.6(GLIBC_2.17)(64bit), 
-    #              libc.so.6(GLIBC_2.4)(64bit), 
-    #              libpthread.so.0()(64bit), 
-    #              rtld(GNU_HASH)
-    #       match: python39-django >= 2.2
-    #if l_deps[n].find(" ") < 0:
-    if l_deps[n].find( filter_prefix[ :len(filter_prefix) - 1 ] ) < 0:
-        info("[SKIPPING] " + l_deps[n])
-        continue
-
-    # Get dependency short package name
-    if " " in l_deps[n]:
-        # Case: python39-future >= 0.14.0
-        dep_short_pkgname = l_deps[n][:l_deps[n].find(" ")]
-    else:
-        # Case: python39-setuptools
-        dep_short_pkgname = l_deps[n]
-    l_deps_no_dup.add(dep_short_pkgname)
-
-info("[Final Dependency List To Process] " + ", ".join(l_deps_no_dup))
-for n,val in enumerate(l_deps_no_dup):
-    dep_full_pkgname = get_full_pkgname_rpm_qa(partial_name=val, match=val)
-    if not dep_full_pkgname:
-        warn("no packages found for dependency name: " + dep_short_pkgname)
+    # Get full rpm name
+    full_pkgname = get_full_pkgname_rpm_qa(partial_name=input_pkg, match=filter_prefix+input_pkg)
+    info("[Found Package To Process] " + full_pkgname)
+    if not full_pkgname:
+        warn("no packages found: " + args.package)
         exit(0)
 
-    # 
-    cmd_pkgname = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " name"
-    thirdparty_title = subprocess.getoutput(cmd_pkgname)
-    cmd_pkgversion = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " version"
-    thirdparty_version = subprocess.getoutput(cmd_pkgversion)
+    # Get pkgname without version
+    cmd_pkgname = "pkgname_analyzer " + full_pkgname + " name"
+    pkgname = subprocess.getoutput(cmd_pkgname)
 
-    # Get 3rd party license string
-    cmd_dnf_info = "dnf info " + thirdparty_title
-    r5 = subprocess.getoutput(cmd_dnf_info)
-    l_r5 = r5.split(sep="\n")
-    for n in range(0, len(l_r5)):
-        if l_r5[n].startswith("License"):
-            thirdparty_license = l_r5[n].split(sep=":")[1].strip()
-            break
+    # Get runtime deps
+    l_deps = get_runtime_deps(pkgname)
 
-    # Compose 3rd party title
-    thirdparty_full_title = prefix[:len(prefix)-1] + " " + thirdparty_title.replace(filter_prefix, "") + " " + thirdparty_version.split(sep="-")[0] + " (" + thirdparty_license + ")"
-    thirdparty_full_tltle_bar = "-"*len(thirdparty_full_title)
-    thirdparty_output += "\n"
-    thirdparty_output += thirdparty_full_tltle_bar + "\n"
-    thirdparty_output += thirdparty_full_title + "\n"
-    thirdparty_output += thirdparty_full_tltle_bar + "\n"
-    thirdparty_output += "\n\n"
+    # Convert Runtime Dependencies into 3rd party licenses
+    l_deps_no_dup = set()
+    for n in range(0, len(l_deps)):
+        debug("current: " + l_deps[n])
 
-    # Lookup licenses
-    cmd_license_path = "repoquery --list " + thirdparty_title + " | grep LICENSE"
-    r_license_path = subprocess.getoutput(cmd_license_path)
-    l_license_path = remove_expiration_msg(r_license_path)
-    if not l_license_path:
-        print("[ERROR] " + thirdparty_title + " doesn't have a LICENSE file!")
-        thirdparty_output += "(package installed missing license file)"
-    else:
-        license_path = l_license_path[0]
-        thirdparty_output += subprocess.getoutput("cat " + license_path)
+        # Skip Case 1: Native Python
+        #              ex: python(abi) = 3.9
+        if l_deps[n].startswith("python("):
+            info("[SKIPPING] " + l_deps[n])
+            continue
 
-    #if re.search('BSD', thirdparty_license, re.IGNORECASE) and "3" in thirdparty_license:
-    #    thirdparty_output += subprocess.getoutput("cat licenses/BSD-3-Clause.txt")
-    #elif re.search('BSD', thirdparty_license, re.IGNORECASE) and "2" in thirdparty_license:
-    #    thirdparty_output += subprocess.getoutput("cat licenses/BSD-2-Clause.txt")
-    #elif re.search('BSD', thirdparty_license):
-    #    thirdparty_output += subprocess.getoutput("cat licenses/BSD-3-Clause.txt")
-    #elif re.search('Apache', thirdparty_license, re.IGNORECASE) and "2" in thirdparty_license:
-    #    thirdparty_output += subprocess.getoutput("cat licenses/Apache-2.0.txt")
-    #elif re.search('Apache', thirdparty_license, re.IGNORECASE):
-    #    thirdparty_output += subprocess.getoutput("cat licenses/Apache-2.0.txt")
-    #elif re.search('GPL', thirdparty_license, re.IGNORECASE) and "3" in thirdparty_license:
-    #    thirdparty_output += subprocess.getoutput("cat licenses/GPL-3.0-or-later.txt")
-    #elif re.search('GPL', thirdparty_license, re.IGNORECASE) and "2" in thirdparty_license:
-    #    thirdparty_output += subprocess.getoutput("cat licenses/GPL-2.0.txt")
-    #elif re.search('PSF', thirdparty_license, re.IGNORECASE):
-    #    thirdparty_output += subprocess.getoutput("cat licenses/PSF-2.0_long.txt")
-    #elif re.search('Python', thirdparty_license, re.IGNORECASE) and re.search('Style', thirdparty_license, re.IGNORECASE):
-    #    thirdparty_output += subprocess.getoutput("cat licenses/Python-Style.txt")
-    #elif re.search('MIT', thirdparty_license, re.IGNORECASE):
-    #    thirdparty_output += subprocess.getoutput("cat licenses/MIT.txt")
-    #else:
-    #    thirdparty_output += "(MISSING 3RD PARTY LICENSE)"
+        # Skip Case 2: Doesn' have matching filter_prefix
+        #          ex: ld-linux-aarch64.so.1()(64bit), 
+        #              ld-linux-aarch64.so.1(GLIBC_2.17)(64bit), 
+        #              libc.so.6(GLIBC_2.17)(64bit), 
+        #              libc.so.6(GLIBC_2.4)(64bit), 
+        #              libpthread.so.0()(64bit), 
+        #              rtld(GNU_HASH)
+        #       match: python39-django >= 2.2
+        #if l_deps[n].find(" ") < 0:
+        if l_deps[n].find( filter_prefix[ :len(filter_prefix) - 1 ] ) < 0:
+            info("[SKIPPING] " + l_deps[n])
+            continue
 
-    thirdparty_output += "\n\n"
-    thirdparty_output += "="*80
-    thirdparty_output += "\n"
+        # Get dependency short package name
+        if " " in l_deps[n]:
+            # Case: python39-future >= 0.14.0
+            dep_short_pkgname = l_deps[n][:l_deps[n].find(" ")]
+        else:
+            # Case: python39-setuptools
+            dep_short_pkgname = l_deps[n]
+        l_deps_no_dup.add(dep_short_pkgname)
 
-print(thirdparty_output)
-exit(0)
+    info("[Final Dependency List To Process] " + ", ".join(l_deps_no_dup))
+    for n,val in enumerate(l_deps_no_dup):
+        dep_full_pkgname = get_full_pkgname_rpm_qa(partial_name=val, match=val)
+        if not dep_full_pkgname:
+            warn("no packages found for dependency name: " + dep_short_pkgname)
+            exit(0)
+
+        # 
+        cmd_pkgname = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " name"
+        thirdparty_title = subprocess.getoutput(cmd_pkgname)
+        cmd_pkgversion = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " version"
+        thirdparty_version = subprocess.getoutput(cmd_pkgversion)
+
+        # Get 3rd party license string
+        cmd_dnf_info = "dnf info " + thirdparty_title
+        r5 = subprocess.getoutput(cmd_dnf_info)
+        l_r5 = r5.split(sep="\n")
+        for n in range(0, len(l_r5)):
+            if l_r5[n].startswith("License"):
+                thirdparty_license = l_r5[n].split(sep=":")[1].strip()
+                break
+
+        # Compose 3rd party title
+        thirdparty_full_title = prefix[:len(prefix)-1] + " " + thirdparty_title.replace(filter_prefix, "") + " " + thirdparty_version.split(sep="-")[0] + " (" + thirdparty_license + ")"
+        thirdparty_full_tltle_bar = "-"*len(thirdparty_full_title)
+        thirdparty_output += "\n"
+        thirdparty_output += thirdparty_full_tltle_bar + "\n"
+        thirdparty_output += thirdparty_full_title + "\n"
+        thirdparty_output += thirdparty_full_tltle_bar + "\n"
+        thirdparty_output += "\n\n"
+
+        # Lookup licenses
+        cmd_license_path = "repoquery --list " + thirdparty_title + " | grep LICENSE"
+        r_license_path = subprocess.getoutput(cmd_license_path)
+        l_license_path = remove_expiration_msg(r_license_path)
+        if not l_license_path:
+            print("[ERROR] " + thirdparty_title + " doesn't have a LICENSE file!")
+            thirdparty_output += "(package installed missing license file)"
+        else:
+            license_path = l_license_path[0]
+            thirdparty_output += subprocess.getoutput("cat " + license_path)
+
+        #if re.search('BSD', thirdparty_license, re.IGNORECASE) and "3" in thirdparty_license:
+        #    thirdparty_output += subprocess.getoutput("cat licenses/BSD-3-Clause.txt")
+        #elif re.search('BSD', thirdparty_license, re.IGNORECASE) and "2" in thirdparty_license:
+        #    thirdparty_output += subprocess.getoutput("cat licenses/BSD-2-Clause.txt")
+        #elif re.search('BSD', thirdparty_license):
+        #    thirdparty_output += subprocess.getoutput("cat licenses/BSD-3-Clause.txt")
+        #elif re.search('Apache', thirdparty_license, re.IGNORECASE) and "2" in thirdparty_license:
+        #    thirdparty_output += subprocess.getoutput("cat licenses/Apache-2.0.txt")
+        #elif re.search('Apache', thirdparty_license, re.IGNORECASE):
+        #    thirdparty_output += subprocess.getoutput("cat licenses/Apache-2.0.txt")
+        #elif re.search('GPL', thirdparty_license, re.IGNORECASE) and "3" in thirdparty_license:
+        #    thirdparty_output += subprocess.getoutput("cat licenses/GPL-3.0-or-later.txt")
+        #elif re.search('GPL', thirdparty_license, re.IGNORECASE) and "2" in thirdparty_license:
+        #    thirdparty_output += subprocess.getoutput("cat licenses/GPL-2.0.txt")
+        #elif re.search('PSF', thirdparty_license, re.IGNORECASE):
+        #    thirdparty_output += subprocess.getoutput("cat licenses/PSF-2.0_long.txt")
+        #elif re.search('Python', thirdparty_license, re.IGNORECASE) and re.search('Style', thirdparty_license, re.IGNORECASE):
+        #    thirdparty_output += subprocess.getoutput("cat licenses/Python-Style.txt")
+        #elif re.search('MIT', thirdparty_license, re.IGNORECASE):
+        #    thirdparty_output += subprocess.getoutput("cat licenses/MIT.txt")
+        #else:
+        #    thirdparty_output += "(MISSING 3RD PARTY LICENSE)"
+
+        thirdparty_output += "\n\n"
+        thirdparty_output += "="*80
+        thirdparty_output += "\n"
+
+    print(thirdparty_output)
+
+if __name__ == "__main__":
+    main()
