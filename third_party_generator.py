@@ -2,6 +2,7 @@
 import subprocess
 import sys
 import re
+import os
 
 import args_parser
 parser = args_parser.get_parser()
@@ -55,7 +56,7 @@ def swap_based_on_pkgname_and_following_digits(l, pkgname):
 
 # Get full pkg name by "rpm -qa"
 def get_full_pkgname_rpm_qa(partial_name, match):
-    cmd = "rpm -qa | grep " + partial_name
+    cmd = "rpm -qa | grep \"" + partial_name + "\""
     debug("[CMD] " + cmd)
     r = subprocess.getoutput(cmd)
 
@@ -83,35 +84,8 @@ def get_runtime_deps(pkgname):
     info("[Dependencies] " + ", ".join(l_r))
     return l_r
 
-
-def main():
-    input_pkg = args.package.lower()
-    prefix = args.prefix
-    filter_prefix = args.filter
-
-    # Construct THIRD_PARTY_LICENSE file
-    # header
-    thirdparty_output = subprocess.getoutput("cat THIRD_PARTY_LICENSES_HEADER")
-
-    # Start
-    debug("search string: " + args.package)
-    input_pkg = input_pkg[len(prefix):] if prefix and input_pkg.startswith(prefix) else input_pkg
-
-    # Get full rpm name
-    full_pkgname = get_full_pkgname_rpm_qa(partial_name=input_pkg, match=filter_prefix+input_pkg)
-    info("[Found Package To Process] " + full_pkgname)
-    if not full_pkgname:
-        warn("no packages found: " + args.package)
-        exit(0)
-
-    # Get pkgname without version
-    cmd_pkgname = "pkgname_analyzer " + full_pkgname + " name"
-    pkgname = subprocess.getoutput(cmd_pkgname)
-
-    # Get runtime deps
+def get_3rd_party_runtime_deps(pkgname, filter_prefix):
     l_deps = get_runtime_deps(pkgname)
-
-    # Convert Runtime Dependencies into 3rd party licenses
     l_deps_no_dup = set()
     for n in range(0, len(l_deps)):
         debug("current: " + l_deps[n])
@@ -143,7 +117,44 @@ def main():
             # Case: python39-setuptools
             dep_short_pkgname = l_deps[n]
         l_deps_no_dup.add(dep_short_pkgname)
+    return l_deps_no_dup
 
+def main():
+    input_pkg = args.package
+    if args.prefix:
+        prefix = args.prefix
+        prefix = prefix + "-" if prefix[-1] != "-" else prefix
+    else:
+        prefix = ""
+    if args.filter:
+        filter_prefix = args.filter
+        filter_prefix = filter_prefix + "-" if filter_prefix[-1] != "-" else filter_prefix
+    else:
+        filter_prefix = ""
+
+    # Construct THIRD_PARTY_LICENSE file
+    # header
+    thirdparty_output = subprocess.getoutput("cat " + os.path.dirname(__file__) + "/THIRD_PARTY_LICENSES_HEADER")
+
+    # Remove prefix if found
+    debug("search string: " + args.package)
+    input_pkg = input_pkg[len(prefix):] if prefix and input_pkg.startswith(prefix) else input_pkg
+
+    # Get full rpm name
+    full_pkgname = get_full_pkgname_rpm_qa(partial_name=input_pkg, match=filter_prefix+input_pkg)
+    info("[Found Package To Process] " + full_pkgname)
+    if not full_pkgname:
+        warn("no packages found: " + args.package)
+        exit(0)
+
+    # Get pkgname without version
+    cmd_pkgname = "pkgname_analyzer " + full_pkgname + " name"
+    pkgname = subprocess.getoutput(cmd_pkgname)
+
+    # Get runtime deps
+    l_deps_no_dup = get_3rd_party_runtime_deps(pkgname, filter_prefix)
+
+    # Convert Runtime Dependencies into 3rd party licenses
     info("[Final Dependency List To Process] " + ", ".join(l_deps_no_dup))
     for n,val in enumerate(l_deps_no_dup):
         dep_full_pkgname = get_full_pkgname_rpm_qa(partial_name=val, match=val)
@@ -152,9 +163,9 @@ def main():
             exit(0)
 
         # 
-        cmd_pkgname = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " name"
+        cmd_pkgname = "pkgname_analyzer " + dep_full_pkgname + " name"
         thirdparty_title = subprocess.getoutput(cmd_pkgname)
-        cmd_pkgversion = "./pkgname_analyzer/pkgname_analyzer " + dep_full_pkgname + " version"
+        cmd_pkgversion = "pkgname_analyzer " + dep_full_pkgname + " version"
         thirdparty_version = subprocess.getoutput(cmd_pkgversion)
 
         # Get 3rd party license string
