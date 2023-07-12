@@ -15,6 +15,8 @@ Source1:        THIRD_PARTY_LICENSES
 
 ### Step 3: Copy SOURCE1 to BUILD/<WORK_DIR>
 ```
+%prep
+...
 # Add 3rd party license
 %{__cp} %{SOURCE1} .
 ```
