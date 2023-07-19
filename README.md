@@ -4,7 +4,7 @@
 
 - [pkgname_analyzer](https://github.com/amdslancelot/pkgname_analyzer)
 ```
-export PATH="$PATH:/root/git/pkgname_analyzer/"
+export PYTHONPATH="/root/git6/pkgname_analyzer/"
 ```
 
 ## Usage

@@ -24,6 +24,11 @@ def warn(s):
     if is_debug or args.debug:
       print("[WARN] %s" % (s))
 
+
+#====================================================================
+
+import pkgname_analyzer
+
 def remove_expiration_msg(s):
     #debug("s: " + str(s))
     l_s = s.split(sep="\n")
@@ -148,8 +153,7 @@ def main():
         exit(0)
 
     # Get pkgname without version
-    cmd_pkgname = "pkgname_analyzer " + full_pkgname + " name"
-    pkgname = subprocess.getoutput(cmd_pkgname)
+    pkgname = pkgname_analyzer.analyze_pkgname(full_pkgname, "name")
 
     # Get runtime deps
     l_deps_no_dup = get_3rd_party_runtime_deps(pkgname, filter_prefix)
@@ -163,10 +167,8 @@ def main():
             exit(0)
 
         # 
-        cmd_pkgname = "pkgname_analyzer " + dep_full_pkgname + " name"
-        thirdparty_title = subprocess.getoutput(cmd_pkgname)
-        cmd_pkgversion = "pkgname_analyzer " + dep_full_pkgname + " version"
-        thirdparty_version = subprocess.getoutput(cmd_pkgversion)
+        thirdparty_title = pkgname_analyzer.analyze_pkgname(dep_full_pkgname, "name")
+        thirdparty_version = pkgname_analyzer.analyze_pkgname(dep_full_pkgname, "version")
 
         # Get 3rd party license string
         cmd_dnf_info = "dnf info " + thirdparty_title
