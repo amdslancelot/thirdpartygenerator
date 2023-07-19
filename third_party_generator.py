@@ -122,17 +122,17 @@ def get_3rd_party_runtime_deps(pkgname, filter_prefix):
             # Case: python39-setuptools
             dep_short_pkgname = l_deps[n]
         l_deps_no_dup.add(dep_short_pkgname)
-    return l_deps_no_dup
+    return l_deps_no_dup 
 
-def main():
-    input_pkg = args.package
-    if args.prefix:
-        prefix = args.prefix
+def get_3rd_party_license(p, pf, fi):
+    input_pkg = p
+    if pf:
+        prefix = pf
         prefix = prefix + "-" if prefix[-1] != "-" else prefix
     else:
         prefix = ""
-    if args.filter:
-        filter_prefix = args.filter
+    if fi:
+        filter_prefix = fi
         filter_prefix = filter_prefix + "-" if filter_prefix[-1] != "-" else filter_prefix
     else:
         filter_prefix = ""
@@ -142,14 +142,14 @@ def main():
     thirdparty_output = subprocess.getoutput("cat " + os.path.dirname(__file__) + "/THIRD_PARTY_LICENSES_HEADER")
 
     # Remove prefix if found
-    debug("search string: " + args.package)
+    debug("search string: " + p)
     input_pkg = input_pkg[len(prefix):] if prefix and input_pkg.startswith(prefix) else input_pkg
 
     # Get full rpm name
     full_pkgname = get_full_pkgname_rpm_qa(partial_name=input_pkg, match=filter_prefix+input_pkg)
     info("[Found Package To Process] " + full_pkgname)
     if not full_pkgname:
-        warn("no packages found: " + args.package)
+        warn("no packages found: " + p)
         exit(0)
 
     # Get pkgname without version
@@ -229,4 +229,4 @@ def main():
     print(thirdparty_output)
 
 if __name__ == "__main__":
-    main()
+    get_3rd_party_license(args.package, args.prefix, args.filter)
