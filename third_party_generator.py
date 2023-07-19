@@ -180,7 +180,7 @@ def main():
                 break
 
         # Compose 3rd party title
-        thirdparty_full_title = prefix[:len(prefix)-1] + " " + thirdparty_title.replace(filter_prefix, "") + " " + thirdparty_version.split(sep="-")[0] + " (" + thirdparty_license + ")"
+        thirdparty_full_title = prefix[:len(prefix)-1] + "-" + thirdparty_title.replace(filter_prefix, "") + " " + thirdparty_version.split(sep="-")[0] + " (" + thirdparty_license + ")"
         thirdparty_full_tltle_bar = "-"*len(thirdparty_full_title)
         thirdparty_output += "\n"
         thirdparty_output += thirdparty_full_tltle_bar + "\n"
