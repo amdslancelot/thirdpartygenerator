@@ -28,6 +28,7 @@ def warn(s):
 #====================================================================
 
 import pkgname_analyzer
+from edge_case_pkgname_convert import PKGNAME_CONVERT
 
 def remove_expiration_msg(s):
     #debug("s: " + str(s))
@@ -90,8 +91,9 @@ def get_runtime_deps(pkgname):
     return l_r
 
 def get_3rd_party_runtime_deps(pkgname, filter_prefix):
+    debug("filter_prefix=" + filter_prefix)
     l_deps = get_runtime_deps(pkgname)
-    l_deps_no_dup = set()
+    set_deps_no_dup = set()
     for n in range(0, len(l_deps)):
         debug("current: " + l_deps[n])
 
@@ -121,8 +123,8 @@ def get_3rd_party_runtime_deps(pkgname, filter_prefix):
         else:
             # Case: python39-setuptools
             dep_short_pkgname = l_deps[n]
-        l_deps_no_dup.add(dep_short_pkgname)
-    return l_deps_no_dup 
+        set_deps_no_dup.add(dep_short_pkgname)
+    return set_deps_no_dup 
 
 def get_3rd_party_license(p, pf, fi):
     input_pkg = p
@@ -136,6 +138,7 @@ def get_3rd_party_license(p, pf, fi):
         filter_prefix = filter_prefix + "-" if filter_prefix[-1] != "-" else filter_prefix
     else:
         filter_prefix = ""
+    debug("filter_prefix=" + filter_prefix)
 
     # Construct THIRD_PARTY_LICENSE file
     # header
@@ -156,14 +159,23 @@ def get_3rd_party_license(p, pf, fi):
     pkgname = pkgname_analyzer.analyze_pkgname(full_pkgname, "name")
 
     # Get runtime deps
-    l_deps_no_dup = get_3rd_party_runtime_deps(pkgname, filter_prefix)
+    set_deps_no_dup = get_3rd_party_runtime_deps(pkgname, filter_prefix)
 
     # Convert Runtime Dependencies into 3rd party licenses
-    info("[Final Dependency List To Process] " + ", ".join(l_deps_no_dup))
-    for n,val in enumerate(l_deps_no_dup):
-        dep_full_pkgname = get_full_pkgname_rpm_qa(partial_name=val, match=val)
+    info("[Final Dependency List To Process] " + ", ".join(set_deps_no_dup))
+    for n,val in enumerate(set_deps_no_dup):
+        if "devel" in val:
+            warn("Found \"devel\" string in dependency (" + val + "), skip!")
+            continue
+
+        # Convert some dependency names to actual rpm names
+        val_convert = val
+        if val in PKGNAME_CONVERT.keys():
+            val_convert = PKGNAME_CONVERT[val_convert]
+
+        dep_full_pkgname = get_full_pkgname_rpm_qa(partial_name=val_convert, match=val_convert)
         if not dep_full_pkgname:
-            warn("no packages found for dependency name: " + dep_short_pkgname)
+            warn("no packages found for dependency name: " + val_convert)
             exit(0)
 
         # 

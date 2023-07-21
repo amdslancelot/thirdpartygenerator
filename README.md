@@ -7,26 +7,6 @@
 export PYTHONPATH="/root/git/pkgname_analyzer/"
 ```
 
-## Usage
-```
-# /root/git/thirdpartygenerator/third_party_generator.py -h
-usage: third_party_generator.py [-h] [--package PACKAGE] [--prefix PREFIX]
-                                [--filter FILTER] [-d]
-
-Lans License File Detect Tool
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --package PACKAGE, -p PACKAGE
-                        looking for specific package
-  --prefix PREFIX, -pf PREFIX
-                        A prefix in the file to remove
-  --filter FILTER, -fi FILTER
-                        A filter(also a prefix) to move the preferred pkg name
-                        (starts with the filter prefix) to be picked up first
-  -d, --debug           debug mode
-```
-
 ## Example: Generate 3rd party license for `python39-click`
 ```
 # ./third_party_generator.py -p click -pf python- -fi python39- 
@@ -96,4 +76,40 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ## Debug
 ```
 # ./third_party_generator.py -p click -pf python- -fi python39- -d
+```
+
+## Edge Case
+- Sometimes the dependency name may not match the rpm name. Ex: dependency python38-wheel rpm name is python38-pip-wheel
+```
+[WARN] no packages found for dependency name: python38-wheel
+```
+- In this case, add the conversion to: edge_case_pkgname_convert.py. Ex:
+```
+PKGNAME_CONVERT = {
+    "python38-yaml": "python38-pyyaml",
+    "python39-yaml": "python39-pyyaml",
+    "python38-wheel": "python38-pip-wheel",
+    "python39-wheel": "python39-pip-wheel"
+}
+```
+
+
+## Usage
+```
+# /root/git/thirdpartygenerator/third_party_generator.py -h
+usage: third_party_generator.py [-h] [--package PACKAGE] [--prefix PREFIX]
+                                [--filter FILTER] [-d]
+
+Lans License File Detect Tool
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --package PACKAGE, -p PACKAGE
+                        looking for specific package
+  --prefix PREFIX, -pf PREFIX
+                        A prefix in the file to remove
+  --filter FILTER, -fi FILTER
+                        A filter(also a prefix) to move the preferred pkg name
+                        (starts with the filter prefix) to be picked up first
+  -d, --debug           debug mode
 ```
